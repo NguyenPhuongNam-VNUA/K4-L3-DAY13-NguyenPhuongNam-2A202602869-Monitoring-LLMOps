@@ -39,7 +39,7 @@
 |---|---|---|---|
 | `validate_logs.py` | 30/100 | 100/100 | Đạt điểm tuyệt đối; đầy đủ schema, correlation_id, context enrichment và PII scrubbing |
 | `validate_dashboard.py` | 6/6 panel | 6/6 panel | Hợp lệ 100% contract cấu hình 6 panel |
-| `pytest` | 22 passed / 22 | 24 passed / 24 | 100% unit tests passed (bổ sung test CCCD và Credit Card) |
+| `pytest` | 22 passed / 22 | 25 passed / 25 | 100% unit tests passed (bổ sung test CCCD, Credit Card và prompt flow) |
 | Số traces hợp lệ | 10 | 20+ | Đầy đủ quan hệ cha-con (root agent, retriever, generation) trên Langfuse |
 | Số PII leak | 0 | 0 | Scrubbing triệt để email, phone, CCCD, credit card |
 | Latency P95 / TTFT P95 | 864.0ms / 55.0ms | 164.0ms / 55.0ms | Đo được qua load test và endpoint /metrics |
@@ -134,10 +134,11 @@
 
 ## 9. Checklist trước khi nộp
 
-- [ ] Kết quả và evidence thuộc commit SHA cuối.
-- [ ] Tất cả ảnh/output mở được bằng đường dẫn tương đối.
-- [ ] Incident evidence nối đúng metric → log → trace.
-- [ ] Trace/prompt evidence thuộc project Langfuse cá nhân và ảnh không lộ key/secret.
-- [ ] Repository chạy lại được theo README.
-- [ ] Không có secret, API key, PII thô hoặc evidence của người khác/lớp khác.
-- [ ] URL repo và commit SHA cuối đã được nộp trên LMS/Codelabs.
+- [x] Kết quả và evidence thuộc commit SHA cuối.
+- [x] Tất cả ảnh/output mở được bằng đường dẫn tương đối.
+- [x] Incident evidence nối đúng metric → log → trace.
+- [x] Trace/prompt evidence thuộc project Langfuse cá nhân và ảnh không lộ key/secret.
+- [x] Repository chạy lại được theo README.
+- [x] Không có secret, API key, PII thô hoặc evidence của người khác/lớp khác.
+- [x] URL repo và commit SHA cuối đã được nộp trên LMS/Codelabs.
+

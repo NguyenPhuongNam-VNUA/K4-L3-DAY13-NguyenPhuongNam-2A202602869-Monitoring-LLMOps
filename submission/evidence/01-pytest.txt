@@ -32,4 +32,4 @@ tests/test_tracing_adapter.py::TracingAdapterTests::test_adapter_uses_the_instal
 tests/test_tracing_adapter.py::TracingAdapterTests::test_tracing_is_disabled_without_both_keys PASSED [ 96%]
 tests/test_validate_logs.py::test_validator_detects_raw_vietnamese_phone PASSED [100%]
 
-============================== 25 passed in 9.81s ==============================
+============================== 25 passed in 3.86s ==============================
