@@ -47,10 +47,10 @@
 
 ## 4. Logging và PII
 
-- **Cách tạo/nhận và truyền correlation ID:**
-- **Các metadata được ghi vào structured log:**
-- **Cách bảo đảm PII được scrub trước khi ghi:**
-- **Cách kiểm chứng kết quả:**
+- **Cách tạo/nhận và truyền correlation ID:** Trong `CorrelationIdMiddleware` (`app/middleware.py`), gọi `clear_contextvars()` ở đầu mỗi request để cô lập context. Đọc header `x-request-id`, nếu thiếu thì sinh mới theo format `req-<8-char-hex>` (`f"req-{uuid.uuid4().hex[:8]}"`). Bind ID vào contextvars của structlog, gán vào `request.state.correlation_id`, và trả về client qua 2 header `x-request-id` và `x-response-time-ms`. Đồng thời truyền ID này vào `agent.run` để liên kết đồng bộ sang metadata của Langfuse trace.
+- **Các metadata được ghi vào structured log:** Các trường toàn cục (`ts`, `level`, `service`, `event`), các trường context request (`correlation_id`, `user_id_hash` từ sha256, `session_id`, `feature`, `model`, `env`), và các trường đo lường hiệu năng/kết quả (`latency_ms`, `ttft_ms`, `tokens_in`, `tokens_out`, `cost_usd`, `quality_score`, `tool_name`, `tool_success`, `payload`).
+- **Cách bảo đảm PII được scrub trước khi ghi:** Sử dụng các regex pattern trong `app/pii.py` cho email, số điện thoại VN, CCCD (12 chữ số) và thẻ tín dụng (16 chữ số). Cấu hình processor `scrub_event` trong chuỗi xử lý của structlog (`app/logging_config.py`) nằm ngay trước file writer (`JsonlFileProcessor`) và JSON renderer, thực hiện quét và thay thế PII đệ quy trên toàn bộ dữ liệu log trước khi ghi xuống đĩa hoặc in ra console.
+- **Cách kiểm chứng kết quả:** Chạy `python scripts/validate_logs.py` đạt điểm tuyệt đối **100/100** (pass cả 4 tiêu chí JSON schema, correlation ID propagation, context enrichment, và PII scrubbing). Chạy `pytest` pass **24/24 tests** bao gồm cả test PII cho email, số điện thoại, CCCD và thẻ tín dụng. Sample log trong `data/logs.jsonl` không còn rò rỉ PII nguyên văn.
 
 ## 5. Tracing và prompt versioning
 
