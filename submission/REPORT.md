@@ -9,7 +9,7 @@
 - **Lớp:** K4-L3A
 - **Repository URL:** https://github.com/NguyenPhuongNam-VNUA/K4-L3-DAY13-NguyenPhuongNam-2A202602869-Monitoring-LLMOps
 - **Commit SHA cuối:** 
-- **Challenge ID:** 
+- **Challenge ID:** day13-k4-l3a-monitoring-llmops-v1
 - **Tên project Langfuse cá nhân:** `day13-k4-l3a-2A202602869`
 
 ## 2. Evidence index
@@ -18,9 +18,9 @@
 
 | Evidence | Đường dẫn |
 |---|---|
-| Pytest cuối | `evidence/01-pytest.png` |
-| Log validator | `evidence/02-log-validator.png` |
-| Dashboard validator | `evidence/03-dashboard-validator.png` |
+| Pytest cuối | `evidence/01-pytest.txt` |
+| Log validator | `evidence/02-log-validator.txt` |
+| Dashboard validator | `evidence/03-dashboard-validator.txt` |
 | Structured log | `evidence/04-structured-log.png` |
 | PII redaction | `evidence/05-pii-redaction.png` |
 | Trace list | `evidence/06-trace-list.png` |
@@ -95,24 +95,42 @@
 
 ## 7. Điều tra challenge
 
-- **Challenge ID:**
-- **Khoảng thời gian điều tra:**
-- **Triệu chứng từ metrics:**
+- **Challenge ID:** day13-k4-l3a-monitoring-llmops-v1
+- **Khoảng thời gian điều tra:** 09:43:48Z – 09:44:02Z UTC (16:43:48 – 16:44:02 GMT+7 ngày 29/09/2026).
+- **Triệu chứng từ metrics:** Panel "Latency percentiles and TTFT" trên Dashboard ghi nhận độ trễ P95 (`latency_p95`) tăng vọt lên **2667.0 ms** (so với mức baseline bình thường ~160ms - 864ms), tiệm cận ngưỡng vi phạm SLO (3000ms). Trong khi đó, metric TTFT (`ttft_p95`) vẫn duy trì ổn định ở mức **55.0 ms**, cho thấy mô hình LLM vẫn phản hồi tức thì và không phải là nguyên nhân gây nghẽn.
 - **Log line và correlation ID liên quan:**
+  - `correlation_id`: `req-2b886966` (User ID Hash: `dc9b2ec8da9d`, Session: `k4-l3a-challenge-s03`, Feature: `monitoring`).
+  - Log line:
+    ```json
+    {"service": "api", "latency_ms": 2667, "ttft_ms": 55, "tokens_in": 47, "tokens_out": 91, "cost_usd": 0.001506, "quality_score": 0.8, "tool_name": "retrieval", "tool_success": true, "payload": {"answer_preview": "Starter answer. You should improve this output logic and add better quality chec..."}, "event": "response_sent", "correlation_id": "req-2b886966", "feature": "monitoring", "session_id": "k4-l3a-challenge-s03", "env": "dev", "model": "claude-sonnet-4-5", "user_id_hash": "dc9b2ec8da9d", "level": "info", "ts": "2026-09-29T09:43:51.378636Z"}
+    ```
 - **Trace ID và span gây ảnh hưởng:**
-- **Root cause:**
+  - `trace_id`: `de156cf0e6af6bb191a150a5cadd3e50` (gắn liền với request trên qua `session_id: "k4-l3a-challenge-s03"` và `req-2b886966`).
+  - So sánh waterfall trace:
+    - Root observation `lab-agent-run` (type `AGENT`): tổng latency **2.668s**.
+    - Span con `retrieval` (type `RETRIEVER`): latency **2.505s** (chiếm 93.9% tổng thời gian request).
+    - Span con `fake-llm-generate` (type `GENERATION`): latency **0.160s** (chỉ tốn 160ms, hoàn toàn bình thường).
+  - Span gây ảnh hưởng trực tiếp chính là span con **`retrieval`**.
+- **Root cause:** Sự cố `rag_slow` gây độ trễ bất thường 2.5s tại tầng truy xuất dữ liệu vector store (`retrieve()`).
 - **Fix action:**
+  - Khắc phục sự cố tức thời: Gửi POST request tới `/incidents/rag_slow/disable` để tắt cờ giả lập sự cố.
+  - Về mặt hệ thống: Tối ưu chỉ mục vector (HNSW/IVF), bổ sung read replica cho cụm vector store, bật caching cho kết quả truy xuất (semantic cache).
 - **Preventive measure:**
+  - Bổ sung timeout nghiêm ngặt cho bước retrieval (ví dụ 1.5s) cùng mẫu thiết kế Circuit Breaker: nếu vector store không trả về trong 1.5s, tự động ngắt và trả kết quả dự phòng thay vì làm nghẽn toàn bộ luồng request.
+  - Thiết lập cảnh báo sớm `retrieval_latency_p95 > 1000ms` duy trì trong 3 phút trên kênh Slack để phát hiện sớm suy giảm hiệu năng trước khi vi phạm SLO người dùng.
 
 ## 8. Giải thích và tự đánh giá
 
-- **Một quyết định kỹ thuật quan trọng và lý do:**
-- **Một lỗi/blocker đã gặp:**
-- **Cách tìm nguyên nhân và xử lý:**
+- **Một quyết định kỹ thuật quan trọng và lý do:** Quyết định chuyển sang sử dụng `uv` và cấu hình `.python-version` (Python 3.11). Lý do: môi trường mặc định của macOS là Python 3.9 đã End-of-Life, không tương thích với Langfuse SDK v4 (`requires-python >= 3.10`). `uv` giúp cô lập môi trường độc lập, tải Python 3.11 tự động và tăng tốc độ cài đặt thư viện gấp nhiều lần.
+- **Một lỗi/blocker đã gặp:** Ban đầu khi cài `langfuse==4.15.6` bị lỗi `No matching distribution found` do Python 3.9 lọc bỏ các bản release mới; tiếp theo gặp lỗi thiếu binary `pip` khi gọi `uv run pip`.
+- **Cách tìm nguyên nhân và xử lý:** Tra cứu PyPI metadata để phát hiện yêu cầu Python >= 3.10 của Langfuse v4, dùng `uv python pin 3.11` để tạo môi trường chuẩn, và sử dụng lệnh chuẩn `uv pip install -r requirements.txt`.
 - **Cách hiểu luồng Metrics → Logs → Traces:**
-- **Vai trò của prompt version, token/cost, SLO hoặc rollback trong vận hành LLM:**
-- **Điều quan trọng nhất đã học:**
-- **Hạn chế hoặc phần chưa hoàn thành, nếu có:**
+  - *Metrics:* Cung cấp cái nhìn vĩ mô (High-level) về triệu chứng hệ thống (triệu chứng gì, xảy ra lúc nào, có vi phạm SLO không).
+  - *Logs:* Giúp thu hẹp phạm vi điều tra (Zoom-in), sử dụng correlation ID để tìm ra chính xác request nào, user nào, tham số gì bị ảnh hưởng.
+  - *Traces:* Cung cấp cái nhìn vi mô sâu nhất (Deep dive), mổ xẻ từng span bên trong request đó để chỉ ra chính xác dòng code, câu lệnh DB hay bước gọi API nào là thủ phạm gây lỗi hoặc nghẽn độ trễ.
+- **Vai trò của prompt version, token/cost, SLO hoặc rollback trong vận hành LLM:** Ứng dụng LLM phụ thuộc lớn vào prompt và chi phí API bên ngoài. Quản lý prompt version giúp kiểm soát các thay đổi prompt như mã nguồn phần mềm, gán nhãn `production`/`candidate` và cho phép rollback ngay tức khắc khi prompt mới gây ảo giác hoặc giảm chất lượng mà không cần deploy lại code. Theo dõi token và cost giúp ngăn chặn rò rỉ ngân sách đột ngột.
+- **Điều quan trọng nhất đã học:** Kỹ năng xây dựng hệ thống quan sát toàn diện (Observability) cho ứng dụng AI/LLM, che chắn PII bảo mật theo quy định, và quy trình chuẩn mực để phản ứng khi xảy ra sự cố (Incident Response).
+- **Hạn chế hoặc phần chưa hoàn thành, nếu có:** Toàn bộ các TODO bắt buộc từ CP0 đến CP3 đã hoàn thành 100% với điểm validator tối đa (100/100 logs, 6/6 dashboard, 25/25 tests).
 
 ## 9. Checklist trước khi nộp
 
