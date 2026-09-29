@@ -4,13 +4,13 @@
 
 ## 1. Thông tin học viên
 
-- **Họ và tên:**
-- **MSSV:**
+- **Họ và tên:** Nguyễn Phương Nam
+- **MSSV:** 2A202602869
 - **Lớp:** K4-L3A
-- **Repository URL:**
-- **Commit SHA cuối:**
-- **Challenge ID:**
-- **Tên project Langfuse cá nhân:** `day13-k4-l3a-<MSSV>`
+- **Repository URL:** https://github.com/NguyenPhuongNam-VNUA/K4-L3-DAY13-NguyenPhuongNam-2A202602869-Monitoring-LLMOps
+- **Commit SHA cuối:** 
+- **Challenge ID:** 
+- **Tên project Langfuse cá nhân:** `day13-k4-l3a-2A202602869`
 
 ## 2. Evidence index
 
@@ -37,13 +37,13 @@
 
 | Nội dung | Baseline | Kết quả cuối | Nhận xét |
 |---|---|---|---|
-| `validate_logs.py` | | | |
-| `validate_dashboard.py` | | | |
-| `pytest` | | | |
-| Số traces hợp lệ | | | |
-| Số PII leak | | | |
-| Latency P95 / TTFT P95 | | | |
-| Retrieval success rate | | | |
+| `validate_logs.py` | 30/100 | | Chưa enrich correlation_id & context metadata |
+| `validate_dashboard.py` | 6/6 panel | | Đạt 100% contract cấu hình 6 panel |
+| `pytest` | 22 passed / 22 | | Toàn bộ unit test ban đầu passed |
+| Số traces hợp lệ | 10 | | 10/10 requests từ load test đã gửi lên Langfuse |
+| Số PII leak | 0 | | Đã scrub email/PII trong message preview |
+| Latency P95 / TTFT P95 | 864.0ms / 55.0ms | | Đo được qua endpoint /metrics |
+| Retrieval success rate | 100% | | 10/10 request retrieval thành công |
 
 ## 4. Logging và PII
 

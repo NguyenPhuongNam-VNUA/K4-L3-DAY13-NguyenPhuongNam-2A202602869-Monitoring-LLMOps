@@ -1,0 +1,8 @@
+version = 1
+revision = 3
+requires-python = ">=3.11"
+
+[[package]]
+name = "k4-l3-day13-nguyenphuongnam-2a202602869-monitoring-llmops"
+version = "0.1.0"
+source = { virtual = "." }

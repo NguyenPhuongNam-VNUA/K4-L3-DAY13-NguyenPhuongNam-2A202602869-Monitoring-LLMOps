@@ -1,0 +1,7 @@
+[project]
+name = "k4-l3-day13-nguyenphuongnam-2a202602869-monitoring-llmops"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = []
