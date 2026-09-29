@@ -7,7 +7,7 @@ primary_slo:
     total_event: 'event == "request_received"'
   target_percent: 99.5
   error_budget_percent: 0.5
-  note: Học viên phải giải thích hoặc điều chỉnh ngưỡng bằng baseline của mình.
+  note: Dựa trên baseline đo được (Latency P95 = 864ms, runtime ~160ms, error rate = 0%), ngưỡng latency 3000ms đảm bảo phát hiện độ trễ đuôi (tail latency) bất thường. Với target 99.5%, error budget 28 ngày là 0.5% tổng số request được phép vượt quá 3000ms hoặc thất bại.
 guardrails:
   error_rate_pct_max: 2
   daily_cost_usd_max: 2.5

@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import os
 import time
+from contextlib import contextmanager
 from dataclasses import dataclass
+from typing import Any
 
 from . import metrics
 from .mock_llm import FakeLLM
@@ -10,6 +12,18 @@ from .mock_rag import retrieve
 from .pii import hash_user_id, summarize_text
 from .prompt_management import resolve_prompt
 from .tracing import get_langfuse_client, observe, propagate_attributes, tracing_enabled
+
+
+@contextmanager
+def _observation(client: Any, **kwargs: Any):
+    if hasattr(client, "start_as_current_observation") and callable(client.start_as_current_observation):
+        with client.start_as_current_observation(**kwargs) as obs:
+            yield obs
+    else:
+        class _NoOpObservation:
+            def update(self, **_k: Any) -> None:
+                pass
+        yield _NoOpObservation()
 
 
 @dataclass
@@ -51,7 +65,19 @@ class LabAgent:
             },
         ):
             started = time.perf_counter()
-            docs = retrieve(message)
+            with _observation(
+                langfuse_client,
+                name="retrieval",
+                as_type="retriever",
+                input={"query": summarize_text(message)},
+            ) as retrieval_obs:
+                docs = retrieve(message)
+                if retrieval_obs:
+                    retrieval_obs.update(
+                        output={"docs": [summarize_text(d) for d in docs]},
+                        metadata={"doc_count": len(docs)},
+                    )
+
             prompt = resolve_prompt(
                 langfuse_client,
                 feature=feature,
@@ -71,13 +97,33 @@ class LabAgent:
                 },
                 version=prompt.version,
             )
-            # TODO (CP2): instrument retrieve() and FakeLLM.generate() as child
-            # observations. The nested generation must receive prompt, usage and cost.
+
             with propagate_attributes(prompt=prompt.managed_prompt):
-                response = self.llm.generate(prompt.text)
+                with _observation(
+                    langfuse_client,
+                    name="fake-llm-generate",
+                    as_type="generation",
+                    model=self.model,
+                    input={"prompt": summarize_text(prompt.text, max_len=120)},
+                ) as gen_obs:
+                    response = self.llm.generate(prompt.text)
+                    cost_usd = self._estimate_cost(response.usage.input_tokens, response.usage.output_tokens)
+                    if gen_obs:
+                        gen_obs.update(
+                            output={"text": summarize_text(response.text, max_len=120)},
+                            model=self.model,
+                            prompt=prompt.managed_prompt,
+                            usage_details={
+                                "input": response.usage.input_tokens,
+                                "output": response.usage.output_tokens,
+                                "total": response.usage.input_tokens + response.usage.output_tokens,
+                            },
+                            cost_details={"total": cost_usd},
+                            metadata={"ttft_ms": response.ttft_ms, "cost_usd": cost_usd},
+                        )
+
             quality_score = self._heuristic_quality(message, response.text, docs)
             latency_ms = int((time.perf_counter() - started) * 1000)
-            cost_usd = self._estimate_cost(response.usage.input_tokens, response.usage.output_tokens)
 
         metrics.record_request(
             latency_ms=latency_ms,

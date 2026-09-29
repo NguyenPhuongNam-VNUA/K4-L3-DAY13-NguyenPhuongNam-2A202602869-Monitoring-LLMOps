@@ -37,13 +37,13 @@
 
 | Nội dung | Baseline | Kết quả cuối | Nhận xét |
 |---|---|---|---|
-| `validate_logs.py` | 30/100 | | Chưa enrich correlation_id & context metadata |
-| `validate_dashboard.py` | 6/6 panel | | Đạt 100% contract cấu hình 6 panel |
-| `pytest` | 22 passed / 22 | | Toàn bộ unit test ban đầu passed |
-| Số traces hợp lệ | 10 | | 10/10 requests từ load test đã gửi lên Langfuse |
-| Số PII leak | 0 | | Đã scrub email/PII trong message preview |
-| Latency P95 / TTFT P95 | 864.0ms / 55.0ms | | Đo được qua endpoint /metrics |
-| Retrieval success rate | 100% | | 10/10 request retrieval thành công |
+| `validate_logs.py` | 30/100 | 100/100 | Đạt điểm tuyệt đối; đầy đủ schema, correlation_id, context enrichment và PII scrubbing |
+| `validate_dashboard.py` | 6/6 panel | 6/6 panel | Hợp lệ 100% contract cấu hình 6 panel |
+| `pytest` | 22 passed / 22 | 24 passed / 24 | 100% unit tests passed (bổ sung test CCCD và Credit Card) |
+| Số traces hợp lệ | 10 | 20+ | Đầy đủ quan hệ cha-con (root agent, retriever, generation) trên Langfuse |
+| Số PII leak | 0 | 0 | Scrubbing triệt để email, phone, CCCD, credit card |
+| Latency P95 / TTFT P95 | 864.0ms / 55.0ms | 164.0ms / 55.0ms | Đo được qua load test và endpoint /metrics |
+| Retrieval success rate | 100% | 100% | 100% request retrieval thành công |
 
 ## 4. Logging và PII
 
@@ -54,21 +54,44 @@
 
 ## 5. Tracing và prompt versioning
 
-- **Cách xác nhận traces do chính tôi tạo trong project cá nhân:**
+- **Cách xác nhận traces do chính tôi tạo trong project cá nhân:** Sử dụng API key pair cá nhân (`pk-lf-...`, `sk-lf-...`) trong `.env` trỏ tới project Langfuse `day13-k4-l3a-2A202602869`. Mọi trace đều mang environment `dev`, tags `["lab", feature, "claude-sonnet-4-5"]`, `user_id` đã được băm SHA-256 an toàn (12 ký tự) và `session_id` riêng biệt.
 - **Cấu trúc root/retrieval/generation observations:**
-- **Cách nối trace với log:**
-- **Prompt name:**
-- **Version/label baseline:**
-- **Version/label candidate:**
+  - **Root:** `lab-agent-run` (type `AGENT`) bao bọc toàn bộ luồng xử lý agent, gắn context `propagate_attributes`.
+  - **Child 1:** `retrieval` (type `RETRIEVER`) đo bước tra cứu tài liệu `retrieve()`, nhận query preview đã sanitize, trả ra document count và doc previews.
+  - **Child 2:** `fake-llm-generate` (type `GENERATION`) đo bước gọi LLM, liên kết với `prompt.managed_prompt`, lưu model `claude-sonnet-4-5`, `usage_details` (input/output tokens) và `cost_details` (USD).
+  - Cấu trúc cây quan hệ cha-con hiển thị rõ ràng trên waterfall trace, giúp cô lập ngay lập tức bước gây chậm trễ (do retrieval hay do LLM).
+- **Cách nối trace với log:** Sử dụng chung mã định danh `correlation_id` (format `req-<8-hex>`). Middleware gán `correlation_id` vào structured log trong `data/logs.jsonl` đồng thời truyền vào metadata của trace trên Langfuse (`metadata={"correlation_id": correlation_id}`).
+- **Prompt name:** `day13-chat`
+- **Version/label baseline:** Version 1 (gắn nhãn `baseline` và `production`).
+- **Version/label candidate:** Version 2 (gắn nhãn `candidate`).
 - **Trace ID của mỗi version:**
+  - Version 1 (Baseline / Production ban đầu): `8ea00054699b3a812bf8106f6e08ce93` (Correlation ID: `req-f375b8b5`)
+  - Version 2 (Candidate / Promoted to Production): `005c8aefa18c07154e6576a863eea862` (Correlation ID: `req-b4bae10f`)
+  - Version 1 (Sau khi Rollback Production về v1): `1158febf63717f5bb64756bd85297ce8` (Correlation ID: `req-1e9066d6`)
 - **Cách promote và rollback `production`:**
+  - *Promote:* Gán nhãn `production` sang Version 2 thông qua `client.update_prompt(name="day13-chat", version=2, new_labels=["production"])` (hoặc chuyển nhãn trên Langfuse UI).
+  - *Rollback:* Chuyển nhãn `production` quay trở lại Version 1 thông qua `client.update_prompt(name="day13-chat", version=1, new_labels=["production"])`. Ứng dụng tự động tải lại prompt Version 1 mà không cần sửa code hoặc khởi động lại dịch vụ.
 
 ## 6. Dashboard, SLO và alerts
 
-- **Dashboard và sáu panel:**
+- **Dashboard và sáu panel:** Dựng đúng 6 panel theo cấu hình chuẩn `config/dashboard.yaml` (cửa sổ 60 phút):
+  1. *Latency percentiles and TTFT:* Hiển thị P50, P95, P99 và TTFT P95 kèm đường ngưỡng SLO 3000ms.
+  2. *Request traffic:* Số lượng request tích lũy và tốc độ request kèm ngưỡng tối thiểu 1 req/phút.
+  3. *Error rate and retrieval success:* Tỷ lệ lỗi (%) kèm ngưỡng tối đa 2% và tỷ lệ retrieval thành công (%) kèm ngưỡng tối thiểu 90%.
+  4. *Cost over time:* Chi phí tích lũy (USD) kèm đường ngưỡng ngân sách $2.50.
+  5. *Input and output tokens:* Phân bổ token đầu vào/đầu ra kèm ngưỡng 50,000 tokens.
+  6. *Quality proxy:* Điểm chất lượng trung bình kèm đường ngưỡng SLO tối thiểu 0.75.
 - **SLO và lý do chọn:**
+  - Tên SLO: `fast_successful_requests` với mục tiêu **99.5%** trong chu kỳ 28 ngày (`window: 28d`).
+  - SLI: Tỷ lệ request trả về thành công có độ trễ $\le$ 3000ms trên tổng số request nhận được.
+  - Lý do: Đối chiếu với kết quả baseline thực tế (Latency P95 = 864ms, runtime bình thường ~160ms, error rate 0%), ngưỡng 3000ms đủ rộng cho các biến động thông thường nhưng đủ nhạy để phát hiện sự cố nghẽn mạng (tail latency) hoặc lỗi vector search.
 - **Cách tính error budget:**
+  - $\text{Error Budget} = 100\% - 99.5\% = 0.5\%$.
+  - Trong chu kỳ 28 ngày với giả định 10,000 requests, hệ thống chỉ cho phép tối đa 50 requests bị lỗi (HTTP 500) hoặc có độ trễ $> 3000\text{ms}$.
 - **Ba alert và runbook tương ứng:**
+  1. `high_latency_p95`: Severity warning, điều kiện `latency_p95 > 3000` trong `5m`, kênh Slack `#alerts-ai-latency`, runbook tại `docs/alerts.md#alert-1`.
+  2. `high_error_rate`: Severity critical, điều kiện `error_rate_pct > 2` trong `2m`, kênh Slack `#alerts-ai-critical`, runbook tại `docs/alerts.md#alert-2`.
+  3. `quality_or_retrieval_degraded`: Severity warning, điều kiện `quality_score_avg < 0.75 or retrieval_success_rate < 90` trong `5m`, kênh Slack `#alerts-ai-quality`, runbook tại `docs/alerts.md#alert-3`.
 
 ## 7. Điều tra challenge
 
